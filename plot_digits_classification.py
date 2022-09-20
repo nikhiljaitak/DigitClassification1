@@ -1,15 +1,4 @@
-"""
-================================
-Recognizing hand-written digits
-================================
-
-This example shows how scikit-learn can be used to recognize images of
-hand-written digits, from 0-9.
-
-"""
-
-# Author: Gael Varoquaux <gael dot varoquaux at normalesup dot org>
-# License: BSD 3 clause
+#PART: library dependencies -- sklear, torch, tensorflow, numpy, transformers
 
 # Standard scientific Python imports
 import matplotlib.pyplot as plt
@@ -18,87 +7,112 @@ import matplotlib.pyplot as plt
 from sklearn import datasets, svm, metrics
 from sklearn.model_selection import train_test_split
 
-###############################################################################
-# Digits dataset
-# --------------
-#
-# The digits dataset consists of 8x8
-# pixel images of digits. The ``images`` attribute of the dataset stores
-# 8x8 arrays of grayscale values for each image. We will use these arrays to
-# visualize the first 4 images. The ``target`` attribute of the dataset stores
-# the digit each image represents and this is included in the title of the 4
-# plots below.
-#
-# Note: if we were working from image files (e.g., 'png' files), we would load
-# them using :func:`matplotlib.pyplot.imread`.
 
+GAMMAS = [0.005,0.001,0.05,0.01,0.1,0.5]
+Clist=[0.1,0.5,1,3,5]
+C=0.5
+GAMMA=0.005
+train_frac = 0.8
+test_frac = 0.1
+dev_frac = 0.1
+
+#PART: load dataset -- data from csv, tsv, jsonl, pickle
 digits = datasets.load_digits()
 
+#PART: sanity check visualization of the data
 _, axes = plt.subplots(nrows=1, ncols=4, figsize=(10, 3))
 for ax, image, label in zip(axes, digits.images, digits.target):
     ax.set_axis_off()
     ax.imshow(image, cmap=plt.cm.gray_r, interpolation="nearest")
     ax.set_title("Training: %i" % label)
 
-###############################################################################
-# Classification
-# --------------
-#
-# To apply a classifier on this data, we need to flatten the images, turning
-# each 2-D array of grayscale values from shape ``(8, 8)`` into shape
-# ``(64,)``. Subsequently, the entire dataset will be of shape
-# ``(n_samples, n_features)``, where ``n_samples`` is the number of images and
-# ``n_features`` is the total number of pixels in each image.
-#
-# We can then split the data into train and test subsets and fit a support
-# vector classifier on the train samples. The fitted classifier can
-# subsequently be used to predict the value of the digit for the samples
-# in the test subset.
 
+#PART: data pre-processing -- to remove some noise, to normalize data, format the data to be consumed by mode
 # flatten the images
-n_samples = len(digits.images)
-data = digits.images.reshape((n_samples, -1))
+def reshapeImages(inputDigits):
+    n_samples = len(inputDigits.images)
+    reshapedImages = inputDigits.images.reshape((n_samples, -1))
+    return reshapedImages
 
+
+#PART: define train/dev/test splits of experiment protocol
+# train to train model
+# dev to set hyperparameters of the model
+# test to evaluate the performance of the model
+def splitting_model_performance(reshapedImagesarg, inputDigitsarg, best_dev_Accuracy, best_hyper_params, gamma, c):
+
+    dev_test_frac = 1-train_frac
+    X_train, X_dev_test, y_train, y_dev_test = train_test_split(
+        reshapedImagesarg, inputDigitsarg.target, test_size=dev_test_frac, shuffle=True
+                                                                  )
+    X_test, X_dev, y_test, y_dev = train_test_split(
+    X_dev_test, y_dev_test, test_size=(dev_frac)/dev_test_frac, shuffle=True
+                                                    )
+    #PART: Define the model
 # Create a classifier: a support vector classifier
-clf = svm.SVC(gamma=0.001)
+    clf = svm.SVC()                                           
 
-# Split data into 50% train and 50% test subsets
-X_train, X_test, y_train, y_test = train_test_split(
-    data, digits.target, test_size=0.5, shuffle=False
-)
+#PART: setting up hyperparameter
+    hyper_params = {'gamma':gamma,'C':c}
+    clf.set_params(**hyper_params)
 
+
+#PART: Train model
 # Learn the digits on the train subset
-clf.fit(X_train, y_train)
+    clf.fit(X_train, y_train)
 
+#PART: Get test set predictions
 # Predict the value of the digit on the test subset
-predicted = clf.predict(X_test)
+    predicted_test = clf.predict(X_test)
+    predicted_dev = clf.predict(X_dev)
 
-###############################################################################
-# Below we visualize the first 4 test samples and show their predicted
-# digit value in the title.
+    #PART: Sanity check of test predictions
+    _, axes = plt.subplots(nrows=1, ncols=4, figsize=(10, 3))
+    for ax, image, prediction in zip(axes, X_test, predicted_test):
+        ax.set_axis_off()
+        image = image.reshape(8, 8)
+        ax.imshow(image, cmap=plt.cm.gray_r, interpolation="nearest")
+        ax.set_title(f"Prediction: {prediction}")
 
-_, axes = plt.subplots(nrows=1, ncols=4, figsize=(10, 3))
-for ax, image, prediction in zip(axes, X_test, predicted):
-    ax.set_axis_off()
-    image = image.reshape(8, 8)
-    ax.imshow(image, cmap=plt.cm.gray_r, interpolation="nearest")
-    ax.set_title(f"Prediction: {prediction}")
+    #PART: Sanity check of dev predictions
+    _, axes = plt.subplots(nrows=1, ncols=4, figsize=(10, 3))
+    for ax, image, prediction in zip(axes, X_test, predicted_dev):
+        ax.set_axis_off()
+        image = image.reshape(8, 8)
+        ax.imshow(image, cmap=plt.cm.gray_r, interpolation="nearest")
+        ax.set_title(f"Prediction: {prediction}")
 
-###############################################################################
-# :func:`~sklearn.metrics.classification_report` builds a text report showing
-# the main classification metrics.
+#PART: Compute evaluation metrics on dev and test
+    dev_Accuracy = metrics.accuracy_score(predicted_dev, y_dev )
+    test_accuracy = metrics.accuracy_score(predicted_test,y_test)
 
-print(
-    f"Classification report for classifier {clf}:\n"
-    f"{metrics.classification_report(y_test, predicted)}\n"
-)
+    print('dev accuracy: ',metrics.accuracy_score(predicted_dev, y_dev ))
+    print('test accuracy: ',metrics.accuracy_score(predicted_test,y_test))
 
-###############################################################################
-# We can also plot a :ref:`confusion matrix <confusion_matrix>` of the
-# true digit values and the predicted digit values.
+    if dev_Accuracy > best_dev_Accuracy:
+        return dev_Accuracy, hyper_params
+    else:
+        return best_dev_Accuracy, best_hyper_params
 
-disp = metrics.ConfusionMatrixDisplay.from_predictions(y_test, predicted)
-disp.figure_.suptitle("Confusion Matrix")
-print(f"Confusion matrix:\n{disp.confusion_matrix}")
+import pandas as pd
+df=pd.DataFrame(columns=['gamma','c'])
+reshapedImages=reshapeImages(digits)
+parametersList=[]
+index=0
+best_dev_Accuracy=0
+best_hyper_params = {'gamma':GAMMA,'C':C}
+for gamma in GAMMAS:
+    for c in Clist:
+        df.at[index,'gamma']=gamma
+        df.at[index,'c']=c
+        index+=1
+print(len(df))
 
-plt.show()
+for index,row in df.iterrows():
+    best_dev_Accuracy, best_hyper_params = splitting_model_performance(reshapedImages, digits,best_dev_Accuracy,best_hyper_params,row['gamma'],row['c'])
+    print(best_dev_Accuracy, best_hyper_params)
+
+print('best parameters and accuracy ', best_dev_Accuracy, best_hyper_params)
+print('digits shape of pixels:',digits.images.shape)
+
+    
